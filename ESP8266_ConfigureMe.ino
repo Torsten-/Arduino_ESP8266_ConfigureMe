@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 #include "FS.h"
 
-const int connect_wait = 5;
+const int connect_wait = 20;
 
 const char* ssid;
 const char* password;
@@ -47,9 +47,13 @@ bool loadConfig() {
   password = json["password"];
 
   Serial.print("Loaded SSID: ");
-  Serial.println(ssid);
+  Serial.print("|");
+  Serial.print(ssid);
+  Serial.println("|");
   Serial.print("Loaded Password: ");
-  Serial.println(password);
+  Serial.print("|");
+  Serial.print(password);
+  Serial.println("|");
   return true;
 }
 
@@ -68,7 +72,7 @@ bool saveConfig(JsonObject& json) {
 //////////////////////////
 // Configuration AP / Station
 //////////////////////////
-void scan_networks(){
+void scan_networks(bool save_list){
   Serial.println("Scanning for Networks ..");
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
@@ -83,16 +87,16 @@ void scan_networks(){
   }else{
     Serial.print(n);
     Serial.println(" networks found");
-    network_list = "<ul>";
+    if(save_list) network_list = "<ul>";
     for (int i = 0; i < n; ++i){
       // Print SSID and RSSI for each network found
-      network_list += "<li>";
-      network_list += WiFi.SSID(i);
-      network_list += " (";
-      network_list += WiFi.RSSI(i);
-      network_list += ")";
-      network_list += (WiFi.encryptionType(i) == ENC_TYPE_NONE)?" ":"*";
-      network_list += "</li>";
+      if(save_list) network_list += "<li><a href='/?ssid="+WiFi.SSID(i)+"'>";
+      if(save_list) network_list += WiFi.SSID(i);
+      if(save_list) network_list += " (";
+      if(save_list) network_list += WiFi.RSSI(i);
+      if(save_list) network_list += ")";
+      if(save_list) network_list += (WiFi.encryptionType(i) == ENC_TYPE_NONE)?" ":"*";
+      if(save_list) network_list += "</a></li>";
       
       Serial.print(i + 1);
       Serial.print(": ");
@@ -103,15 +107,15 @@ void scan_networks(){
       Serial.println((WiFi.encryptionType(i) == ENC_TYPE_NONE)?" ":"*");
       delay(10);
     }
-    network_list += "</ul>";
+    if(save_list) network_list += "</ul>";
   }
   Serial.println("");
 }
 
 void setup_ap(){
-  scan_networks();
+  scan_networks(true);
   
-  String ssid_string = "ESP8266_"+WiFi.macAddress();
+  String ssid_string = "ESP8266_"+WiFi.macAddress().substring(9);
   char config_ssid[25];
   ssid_string.toCharArray(config_ssid,25);
   
@@ -123,12 +127,17 @@ void setup_ap(){
   IPAddress myIP = WiFi.softAPIP();
   Serial.print("AP IP address: ");
   Serial.println(myIP);
+
+  ssid = "";
+  password = "";
 }
 
 bool setup_station(){
-  scan_networks();
-  
-  Serial.println("Connect to WiFi ..");
+  scan_networks(false);
+
+  Serial.print("Connect to WiFi ");
+  Serial.print(ssid);
+  Serial.println(" ...");
   WiFi.begin(ssid, password);
 
   // Wait for connection
@@ -157,18 +166,18 @@ bool setup_station(){
 // WebServer
 //////////////////////////
 void handleRoot(){
-  String message = "<html><head><title>ESP8266_"+WiFi.macAddress()+"</title></head><body>";
-  message += "<h3>ESP8266_"+WiFi.macAddress()+"</h3>";
+  String message = "<html><head><title>ESP8266 "+WiFi.macAddress()+"</title></head><body>";
+  message += "<h3>ESP8266 "+WiFi.macAddress()+"</h3>";
 
   // List of available APs
   message += "<h4>Available Networks</h4>";
   message += network_list;
-  message += "NOTE: List only updated on boot of ESP8266<br><br>";
+  message += "NOTE: List is only updated on boot of ESP8266<br><br>";
 
   // Form for settings
   message += "<form action='/save' method='POST'><table>";
-  message += "<tr><td><b>SSID:</b></td><td><input type='text' name='ssid' value='"+String(ssid)+"'></td></tr>";
-  message += "<tr><td><b>Password:</b></td><td><input type='text' name='password' value='"+String(password)+"'></td></tr>";
+  message += "<tr><td><b>SSID:</b></td><td><input type='text' name='ssid' value='"+(ssid == "" ? server.arg("ssid") : String(ssid))+"'></td></tr>";
+  message += "<tr><td><b>Password:</b></td><td><input type='text' name='password' value=''></td></tr>";
   message += "<tr><td colspan='2' align='center'><input type='submit' value='save'></td></tr>";
   message += "</table></form>";
   
@@ -177,8 +186,8 @@ void handleRoot(){
 }
 
 void handleSave(){
-  String message = "<html><head><title>ESP8266_"+WiFi.macAddress()+"</title></head><body>";
-  message += "<h3>ESP8266_"+WiFi.macAddress()+"</h3>";
+  String message = "<html><head><title>ESP8266 "+WiFi.macAddress()+"</title></head><body>";
+  message += "<h3>ESP8266 "+WiFi.macAddress()+"</h3>";
   
   if(server.method() == HTTP_POST && server.arg("ssid") != ""){
     Serial.println("--- New Settings ---");
